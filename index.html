@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>箭头生成器</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+  background: #f0f0f0; display: flex; flex-direction: column;
+  height: 100vh; overflow: hidden; user-select: none;
+}
+#toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 10px; background: #e8e8e8;
+  border-bottom: 1px solid #ccc; flex-shrink: 0; flex-wrap: wrap;
+}
+#toolbar button {
+  padding: 5px 12px; font-size: 13px; font-family: inherit;
+  border: 1px solid #bbb; border-radius: 4px;
+  background: #fff; cursor: pointer; color: #333;
+  transition: background 0.1s, opacity 0.1s; white-space: nowrap;
+}
+#toolbar button:hover:not(:disabled) { background: #e0e8ff; border-color: #88a; }
+#toolbar button:active:not(:disabled) { background: #c8d8ff; }
+#toolbar button:disabled { opacity: 0.38; cursor: default; }
+#toolbar .sep { flex: 1; }
+.tbsep { width: 1px; height: 22px; background: #ccc; margin: 0 3px; flex-shrink: 0; }
+
+#main-area { flex: 1; display: flex; min-height: 0; }
+#canvas-wrap { flex: 1; padding: 10px; display: flex; min-width: 0; }
+#cv {
+  flex: 1; border: 1px solid #ccc; border-radius: 6px;
+  display: block; touch-action: none; cursor: crosshair;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+/* ── 收藏夹 ── */
+#fav-panel {
+  width: 160px; flex-shrink: 0; background: #f8f8f8;
+  border-left: 1px solid #ddd; display: flex; flex-direction: column;
+  transition: width 0.2s; overflow: hidden;
+}
+#fav-panel.collapsed { width: 0; }
+#fav-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; background: #ececec; border-bottom: 1px solid #ddd;
+  font-size: 13px; font-weight: bold; color: #444; flex-shrink: 0;
+}
+#fav-header button { border: none; background: none; cursor: pointer; font-size: 14px; color: #666; padding: 0 2px; }
+#fav-header button:hover { color: #333; }
+#fav-list { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+#fav-empty { font-size: 12px; color: #aaa; text-align: center; padding: 20px 8px; line-height: 1.6; }
+.fav-item {
+  border: 1px solid #ddd; border-radius: 6px; background: #fff;
+  overflow: hidden; cursor: pointer; position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fav-item:hover { border-color: #4a7fff; box-shadow: 0 0 0 2px rgba(74,127,255,0.18); }
+.fav-thumb { width: 100%; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; padding: 6px; }
+.fav-thumb svg { width: 100%; height: 100%; }
+.fav-del {
+  position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(200,60,60,0.85); color: #fff; border: none; cursor: pointer;
+  font-size: 11px; line-height: 18px; text-align: center; display: none; padding: 0;
+}
+.fav-item:hover .fav-del { display: block; }
+.fav-del:hover { background: #c03030; }
+.fav-label { font-size: 10px; color: #888; text-align: center; padding: 2px 4px 4px; border-top: 1px solid #f0f0f0; }
+#fav-toggle-wrap { display: flex; align-items: stretch; border-left: 1px solid #ddd; flex-shrink: 0; }
+#fav-toggle {
+  width: 18px; background: #ececec; border: none; cursor: pointer;
+  color: #888; font-size: 11px; writing-mode: vertical-lr;
+  padding: 8px 0; display: flex; align-items: center; justify-content: center;
+}
+#fav-toggle:hover { background: #e0e0e0; color: #444; }
+
+#status { padding: 5px 14px; font-size: 12px; color: #555; background: #f5f5f5; border-top: 1px solid #ddd; flex-shrink: 0; }
+
+#shift-hint {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(30,30,30,0.78); color: #fff; font-size: 12px;
+  padding: 5px 14px; border-radius: 16px; pointer-events: none;
+  display: none; z-index: 50; white-space: nowrap;
+}
+#shift-hint.show { display: block; }
+
+/* ── 模态框 ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  z-index: 100; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #fff; border-radius: 8px; padding: 24px 28px 18px;
+  min-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.22); max-height: 90vh; overflow-y: auto;
+}
+.modal-box h2 { font-size: 16px; margin-bottom: 18px; color: #333; }
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+.modal-actions button { padding: 6px 18px; font-size: 13px; font-family: inherit; border: 1px solid #bbb; border-radius: 4px; background: #f0f0f0; cursor: pointer; }
+.modal-actions button.primary { background: #4a7fff; color: #fff; border-color: #3a6fef; }
+.modal-actions button:hover { filter: brightness(0.93); }
+.modal-box table { width: 100%; border-collapse: collapse; }
+.modal-box td { padding: 8px 6px; font-size: 13px; vertical-align: middle; }
+.modal-box td:first-child { color: #444; width: 110px; white-space: nowrap; }
+.modal-box input[type=range]  { width: 150px; vertical-align: middle; }
+.modal-box input[type=number] { width: 60px; padding: 3px 6px; border: 1px solid #bbb; border-radius: 3px; font-size: 13px; }
+.hint { font-size: 11px; color: #999; margin-left: 6px; }
+.style-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.style-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 10px; border: 2px solid #ddd; border-radius: 6px;
+  cursor: pointer; font-size: 11px; color: #555; background: #fafafa; min-width: 56px;
+}
+.style-opt:hover { border-color: #aac; background: #f0f4ff; }
+.style-opt.selected { border-color: #4a7fff; background: #e8f0ff; color: #333; font-weight: bold; }
+#range-sm-val, #range-st-val { display: inline-block; width: 30px; text-align: right; font-size: 12px; color: #666; }
+
+/* ── 预设 ── */
+#presets-tabs { display: flex; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid #e2e2e2; padding-bottom: 8px; }
+.preset-tab {
+  padding: 5px 16px; border: 1px solid #d5d5d5; border-radius: 14px; background: #fff;
+  font-size: 13px; color: #555; cursor: pointer;
+}
+.preset-tab:hover { border-color: #4a7fff; color: #4a7fff; }
+.preset-tab.active { background: #4a7fff; border-color: #4a7fff; color: #fff; }
+#presets-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; min-width: 480px; }
+.preset-item {
+  border: 1px solid #ddd; border-radius: 6px; background: #fafafa; cursor: pointer;
+  overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex; flex-direction: column; align-items: center;
+}
+.preset-item:hover { border-color: #4a7fff; box-shadow: 0 0 0 2px rgba(74,127,255,0.18); background: #f0f4ff; }
+.preset-thumb { width: 100%; aspect-ratio: 1; padding: 10px; display: flex; align-items: center; justify-content: center; }
+.preset-thumb svg { width: 100%; height: 100%; }
+.preset-label { font-size: 11px; color: #555; padding: 3px 4px 6px; text-align: center; }
+/* 工作台外观 */
+body { background:#edf2f8; color:#26344b; }
+#toolbar { padding:12px; gap:7px; background:#fff; border-bottom:1px solid #dce4ef; }
+#toolbar button { border-color:#dce4ef; border-radius:8px; padding:8px 12px; }
+#toolbar button:nth-child(-n+3) { background:#315fe8; color:white; border-color:#315fe8; }
+#toolbar button:focus-visible { outline:3px solid #93b5ff; outline-offset:2px; }
+#cv { border-color:#dce4ef; box-shadow:0 8px 30px #253e6410; border-radius:10px; }
+#fav-panel { width:190px; background:#f8faff; border-color:#dce4ef; }
+#fav-header { padding:14px; background:#f8faff; border-color:#e4eaf3; }
+#fav-list { padding:10px; gap:10px; }
+.fav-item,.preset-item { border-radius:10px; border-color:#e0e7f1; }
+.modal-box { border-radius:16px; box-shadow:0 24px 80px #12244730; }
+.modal-overlay { backdrop-filter:blur(4px); }
+#status { padding:9px 14px; background:#fff; color:#63738b; border-color:#dce4ef; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button onclick="doSaveAll()">保存 SVG</button>
+  <button onclick="doSavePNG()">保存 PNG</button>
+  <button onclick="doCopyAll()">复制到剪贴板</button>
+  <div class="tbsep"></div>
+  <button onclick="openPresets()">预设箭头</button>
+  <div class="tbsep"></div>
+  <button id="btn-edit-style" disabled onclick="openSelectedStyle()">修改选中样式</button>
+  <button id="btn-style" disabled onclick="useSelectedStyle()" title="将选中箭头的样式设为当前绘制样式">使用该箭头样式</button>
+  <button id="btn-fav"   disabled onclick="addToFavorites()">★ 收藏</button>
+  <button id="btn-dup"   disabled onclick="duplicateSelected()">复制选中</button>
+  <button id="btn-del"   disabled onclick="deleteSelected()">删除选中</button>
+  <button id="btn-desel" disabled onclick="deselectAll()">取消选中</button>
+  <div class="tbsep"></div>
+  <button id="btn-undo"  disabled onclick="undo()">↩ 撤销</button>
+  <button onclick="doClear()">清除全部</button>
+  <div class="sep"></div>
+  <button onclick="openPrefs()">偏好设置</button>
+</div>
+
+<div id="shift-hint">⇧ Shift 约束：水平 / 垂直 / 45°</div>
+
+<div id="main-area">
+  <div id="canvas-wrap"><canvas id="cv"></canvas></div>
+  <div id="fav-panel">
+    <div id="fav-header">
+      <span>收藏夹</span>
+      <button onclick="toggleFavPanel()" title="收起">◀</button>
+    </div>
+    <div id="fav-list">
+      <div id="fav-empty">选中箭头后点击<br>「★ 收藏」<br>可在此处保存</div>
+    </div>
+  </div>
+  <div id="fav-toggle-wrap">
+    <button id="fav-toggle" onclick="toggleFavPanel()">收<br>藏<br>夹</button>
+  </div>
+</div>
+
+<div id="status">拖动绘制；Shift+单击加选；Ctrl+Z 撤销；选中后可移动/旋转/缩放</div>
+
+<!-- 预设箭头 -->
+<div class="modal-overlay" id="presets-modal">
+  <div class="modal-box" style="min-width:560px">
+    <h2>预设箭头</h2>
+    <div id="presets-tabs"></div>
+    <div id="presets-grid"></div>
+    <div class="modal-actions"><button onclick="closePresets()">关闭</button></div>
+  </div>
+</div>
+
+<!-- 偏好设置 -->
+<div class="modal-overlay" id="prefs-modal">
+  <div class="modal-box">
+    <h2>偏好设置</h2>
+    <table>
+      <tr><td>线条粗细</td><td><input type="number" id="p-lw" min="1" max="20" step="1"> <span class="hint">px</span></td></tr>
+      <tr><td>箭头大小</td><td><input type="number" id="p-hs" min="8" max="80" step="1"> <span class="hint">px</span></td></tr>
+      <tr><td>平滑程度</td><td><input type="range" id="p-sm" min="1" max="10" step="1"> <span id="range-sm-val">4</span></td></tr>
+      <tr><td>直线判断</td><td><input type="range" id="p-st" min="0.80" max="1.00" step="0.01"> <span id="range-st-val">0.96</span> <span class="hint">越大越难判为直线</span></td></tr>
+      <tr><td>箭头颜色</td><td><input type="color" id="p-color" style="width:48px;height:28px;border:1px solid #aaa;border-radius:3px;cursor:pointer;padding:1px;"></td></tr>
+      <tr><td>画布背景色</td><td><input type="color" id="p-bg" style="width:48px;height:28px;border:1px solid #aaa;border-radius:3px;cursor:pointer;padding:1px;"></td></tr>
+      <tr><td style="vertical-align:top;padding-top:12px;">箭头样式</td><td style="padding-top:10px;"><div class="style-picker" id="style-picker"></div></td></tr>
+    </table>
+    <div class="modal-actions">
+      <button onclick="resetPrefs()">恢复默认</button>
+      <button onclick="closePrefs()">取消</button>
+      <button class="primary" onclick="applyPrefs()">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="selection-style-modal">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="selection-style-title">
+    <h2 id="selection-style-title">修改选中样式</h2>
+    <p style="font-size:12px;color:#63738b;margin-bottom:12px">仅应用你改动的属性；不会改变新绘制箭头的默认样式。</p>
+    <table>
+      <tr><td>颜色</td><td><input id="s-color" type="color"></td></tr>
+      <tr><td>线条粗细</td><td><input id="s-width" type="number" min="0.5" max="200" step="0.5"> px</td></tr>
+      <tr><td>头部大小</td><td><input id="s-head" type="number" min="2" max="300" step="1"> px</td></tr>
+      <tr><td>头部样式</td><td><select id="s-style"><option value="filled">实心三角</option><option value="open">空心三角</option><option value="lines">线型</option><option value="circle">圆形</option><option value="diamond">菱形</option></select></td></tr>
+      <tr><td>尾部渐隐</td><td><select id="s-fade"><option value="false">关闭</option><option value="true">开启</option></select></td></tr>
+    </table>
+    <p id="s-note" style="font-size:12px;color:#63738b"></p>
+    <div class="modal-actions"><button onclick="closeSelectedStyle()">取消</button><button class="primary" onclick="applySelectedStyle()">应用到选中箭头</button></div>
+  </div>
+</div>
+<script>
+// ══ 样式列表 ══════════════════════════════════════════════════════════════════
+const ARROW_STYLES = [
+  {value:'filled', label:'实心三角'}, {value:'open',   label:'空心三角'},
+  {value:'lines',  label:'线型'},     {value:'circle', label:'实心圆'},
+  {value:'diamond',label:'菱形'},
+];
+
+// ══ 预设 ══════════════════════════════════════════════════════════════════════
+// 气流类：color/fade/style 覆盖默认；paths 为多路径组合；fade 表示尾部渐隐至全透明
+const AIRFLOW_COLOR='#3fa9dc';
+const PRESETS_SIMPLE = [
+  {name:'向右 →',     ctrl:[{x:5,y:50},{x:95,y:50}],                                              straight:true},
+  {name:'向上 ↑',     ctrl:[{x:50,y:95},{x:50,y:5}],                                              straight:true},
+  {name:'斜上 ↗',     ctrl:[{x:10,y:90},{x:90,y:10}],                                             straight:true},
+  {name:'斜下 ↘',     ctrl:[{x:10,y:10},{x:90,y:90}],                                             straight:true},
+  {name:'右转上 ↱',   ctrl:[{x:5,y:78},{x:55,y:78},{x:78,y:55},{x:78,y:5}],                      straight:false},
+  {name:'右转下 ↳',   ctrl:[{x:5,y:22},{x:55,y:22},{x:78,y:45},{x:78,y:95}],                     straight:false},
+  {name:'左转上 ↰',   ctrl:[{x:95,y:78},{x:45,y:78},{x:22,y:55},{x:22,y:5}],                     straight:false},
+  {name:'左转下 ↲',   ctrl:[{x:95,y:22},{x:45,y:22},{x:22,y:45},{x:22,y:95}],                    straight:false},
+  {name:'U形 开口上', ctrl:[{x:20,y:5},{x:20,y:72},{x:50,y:95},{x:80,y:72},{x:80,y:5}],          straight:false},
+  {name:'U形 开口下', ctrl:[{x:20,y:95},{x:20,y:28},{x:50,y:5},{x:80,y:28},{x:80,y:95}],         straight:false},
+  {name:'U形 开口左', ctrl:[{x:95,y:20},{x:28,y:20},{x:5,y:50},{x:28,y:80},{x:95,y:80}],         straight:false},
+  {name:'U形 开口右', ctrl:[{x:5,y:20},{x:72,y:20},{x:95,y:50},{x:72,y:80},{x:5,y:80}],          straight:false},
+  {name:'S形曲线',    ctrl:[{x:20,y:90},{x:20,y:55},{x:80,y:45},{x:80,y:10}],                    straight:false},
+  {name:'Z形曲线',    ctrl:[{x:80,y:90},{x:80,y:55},{x:20,y:45},{x:20,y:10}],                    straight:false},
+  {name:'回形钩 ↩',   ctrl:[{x:10,y:35},{x:75,y:35},{x:93,y:50},{x:75,y:65},{x:10,y:65}],        straight:false},
+  {name:'大弧转向',   ctrl:[{x:5,y:88},{x:55,y:88},{x:92,y:50},{x:55,y:12},{x:5,y:12}],          straight:false},
+];
+const PRESETS_AIRFLOW = [
+  {name:'单波气流', color:AIRFLOW_COLOR, fade:true, style:'filled',
+    ctrl:[{x:2,y:56},{x:28,y:38},{x:56,y:62},{x:82,y:40},{x:96,y:42}], straight:false},
+  {name:'三重波浪', color:AIRFLOW_COLOR, fade:true, style:'filled', size:230, paths:[
+    {ctrl:[{x:2,y:24},{x:30,y:8},{x:58,y:24},{x:88,y:4}],  straight:false},
+    {ctrl:[{x:2,y:56},{x:30,y:40},{x:58,y:56},{x:88,y:36}],straight:false},
+    {ctrl:[{x:2,y:88},{x:30,y:72},{x:58,y:88},{x:88,y:68}],straight:false},
+  ]},
+  {name:'斜落气流', color:AIRFLOW_COLOR, fade:true, style:'filled', size:200, paths:[
+    {ctrl:[{x:30,y:4},{x:16,y:50},{x:8,y:94}],  straight:false},
+    {ctrl:[{x:62,y:4},{x:48,y:50},{x:40,y:94}], straight:false},
+    {ctrl:[{x:94,y:4},{x:80,y:50},{x:72,y:94}], straight:false},
+  ]},
+  {name:'环流旋转', color:AIRFLOW_COLOR, fade:true, style:'filled', size:190, paths:[
+    {ctrl:[{x:10,y:62},{x:16,y:28},{x:48,y:8},{x:80,y:24},{x:92,y:54}], straight:false},
+    {ctrl:[{x:86,y:48},{x:76,y:76},{x:44,y:90},{x:16,y:74}],            straight:false},
+  ]},
+  {name:'直线射流', color:AIRFLOW_COLOR, fade:true, style:'filled', size:220, paths:[
+    {ctrl:[{x:2,y:22},{x:72,y:8}],  straight:true},
+    {ctrl:[{x:2,y:42},{x:96,y:36}], straight:true},
+    {ctrl:[{x:2,y:62},{x:84,y:64}], straight:true},
+    {ctrl:[{x:2,y:82},{x:64,y:92}], straight:true},
+  ]},
+  {name:'交叉分流', color:AIRFLOW_COLOR, fade:true, style:'filled', size:200, paths:[
+    {ctrl:[{x:2,y:36},{x:48,y:56},{x:92,y:14}], straight:false},
+    {ctrl:[{x:2,y:64},{x:48,y:44},{x:92,y:86}], straight:false},
+  ]},
+  {name:'扇形散流', color:AIRFLOW_COLOR, fade:true, style:'filled', size:210, paths:[
+    {ctrl:[{x:2,y:50},{x:52,y:42},{x:94,y:16}], straight:false},
+    {ctrl:[{x:2,y:50},{x:56,y:50},{x:98,y:52}], straight:false},
+    {ctrl:[{x:2,y:50},{x:52,y:60},{x:90,y:88}], straight:false},
+  ]},
+  {name:'缓波气流', color:AIRFLOW_COLOR, fade:true, style:'filled',
+    ctrl:[{x:3,y:52},{x:34,y:40},{x:66,y:58},{x:96,y:44}], straight:false},
+];
+const PRESET_CATS = [
+  {name:'简约', presets:PRESETS_SIMPLE},
+  {name:'气流', presets:PRESETS_AIRFLOW},
+];
+let activePresetCat = 0;
+
+// ══ 偏好 ══════════════════════════════════════════════════════════════════════
+const DEFAULTS = {lineWidth:2,headSize:20,smoothing:4,straightThresh:0.96,lineColor:"#222222",canvasBg:"#ffffff",arrowStyle:"filled",fade:false};
+function loadPrefs(){try{const s=localStorage.getItem("arrow_gen_v3");if(s)return Object.assign({},DEFAULTS,JSON.parse(s));}catch(e){}return Object.assign({},DEFAULTS);}
+function savePrefs(p){try{localStorage.setItem("arrow_gen_v3",JSON.stringify(p));}catch(e){}}
+let prefs = loadPrefs();
+
+// ══ 画布 ══════════════════════════════════════════════════════════════════════
+const cv = document.getElementById("cv");
+let ctx = cv.getContext("2d");
+
+function initCanvas(){
+  const r = document.getElementById("canvas-wrap").getBoundingClientRect();
+  cv.width = Math.max(100, r.width-20); cv.height = Math.max(100, r.height-20);
+  cv.style.background = prefs.canvasBg; redrawAll();
+}
+let _rsTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(_rsTimer);
+  _rsTimer = setTimeout(() => {
+    const r = document.getElementById("canvas-wrap").getBoundingClientRect();
+    cv.width = Math.max(100, r.width-20); cv.height = Math.max(100, r.height-20);
+    cv.style.background = prefs.canvasBg; redrawAll();
+  }, 120);
+});
+
+// ══ 数据模型 ══════════════════════════════════════════════════════════════════
+let arrows = [];
+let selectedSet = new Set(); // 多选：存储选中的 arrow 索引集合
+
+function makeArrow(ctrl, straight, sampled){
+  return {ctrl, straight, sampled, tip:sampled[sampled.length-1], angle:tipAngle(sampled),
+    style:prefs.arrowStyle, color:prefs.lineColor, lineWidth:prefs.lineWidth, headSize:prefs.headSize, fade:!!prefs.fade};
+}
+
+// 采用选中箭头的样式作为后续绘制样式
+function useSelectedStyle(){
+  const idx=singleIdx(); if(idx<0)return;
+  const a=arrows[idx];
+  prefs.arrowStyle=a.style; prefs.lineColor=a.color;
+  prefs.lineWidth=a.lineWidth; prefs.headSize=a.headSize; prefs.fade=!!a.fade;
+  savePrefs(prefs);
+  setStatus(`已采用该箭头样式（${a.fade?"渐隐 ":""}${a.color} / 线宽 ${a.lineWidth}）— 现在绘制的新箭头将使用此样式`);
+}
+function clonePts(pts){ return pts.map(p=>({x:p.x,y:p.y})); }
+function cloneArrow(a){ return {...a, ctrl:clonePts(a.ctrl), sampled:clonePts(a.sampled), tip:{...a.tip}}; }
+
+// 选中相关辅助
+function singleIdx(){ return selectedSet.size===1 ? [...selectedSet][0] : -1; }
+
+// ══ 历史 / 撤销 ══════════════════════════════════════════════════════════════
+let history = [];
+const MAX_HISTORY = 30;
+
+function pushHistory(){
+  history.push({arrows:arrows.map(cloneArrow), selected:[...selectedSet]});
+  if(history.length > MAX_HISTORY) history.shift();
+  document.getElementById("btn-undo").disabled = false;
+}
+function undo(){
+  if(!history.length){setStatus("没有可撤销的操作");return;}
+  const snap = history.pop();
+  arrows = snap.arrows;
+  selectedSet = new Set(snap.selected.filter(i=>i<arrows.length));
+  syncButtons(); redrawAll();
+  document.getElementById("btn-undo").disabled = history.length===0;
+  setStatus(`已撤销 — 共 ${arrows.length} 个箭头`);
+}
+
+// ══ 几何 ══════════════════════════════════════════════════════════════════════
+function douglasPeucker(pts, eps){
+  if(pts.length<3) return pts.slice();
+  function perp(p,a,b){const dx=b.x-a.x,dy=b.y-a.y;if(!dx&&!dy)return Math.hypot(p.x-a.x,p.y-a.y);const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy)));return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));}
+  function rdp(arr){if(arr.length<=2)return arr.slice();let dmax=0,idx=0;for(let i=1;i<arr.length-1;i++){const d=perp(arr[i],arr[0],arr[arr.length-1]);if(d>dmax){dmax=d;idx=i;}}if(dmax>eps)return rdp(arr.slice(0,idx+1)).slice(0,-1).concat(rdp(arr.slice(idx)));return[arr[0],arr[arr.length-1]];}
+  return rdp(pts);
+}
+function isStraight(ctrl, thresh){const a=ctrl[0],b=ctrl[ctrl.length-1];const chord=Math.hypot(b.x-a.x,b.y-a.y);if(chord<1)return true;let arc=0;for(let i=0;i<ctrl.length-1;i++)arc+=Math.hypot(ctrl[i+1].x-ctrl[i].x,ctrl[i+1].y-ctrl[i].y);return chord/arc>=thresh;}
+function catmullRomSample(ctrl, n){
+  if(ctrl.length<2) return ctrl.slice();
+  const pts=[ctrl[0],...ctrl,ctrl[ctrl.length-1]]; const res=[];
+  for(let i=1;i<pts.length-2;i++){const p0=pts[i-1],p1=pts[i],p2=pts[i+1],p3=pts[i+2];for(let k=0;k<n;k++){const t=k/n,t2=t*t,t3=t2*t;res.push({x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)});}}
+  res.push(ctrl[ctrl.length-1]); return res;
+}
+function tipAngle(sampled){const n=sampled.length;const ref=sampled[Math.max(0,n-Math.max(3,Math.floor(n/8)))];return Math.atan2(sampled[n-1].y-ref.y,sampled[n-1].x-ref.x);}
+function trimPath(sampled, dist){if(dist<=0||sampled.length<2)return sampled;let pts=sampled.slice(),rem=dist;while(pts.length>1&&rem>0){const a=pts[pts.length-2],b=pts[pts.length-1];const d=Math.hypot(b.x-a.x,b.y-a.y);if(d<=rem){rem-=d;pts.pop();}else{const t=1-rem/d;pts[pts.length-1]={x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y)};rem=0;}}return pts;}
+function styleTrimDist(style, hs){return style==='lines'?0:style==='circle'?hs*0.45:hs;}
+
+// ══ Shift 约束绘制 ════════════════════════════════════════════════════════════
+let shiftDown=false, shiftEnd=null;
+window.addEventListener("keydown", e=>{if(e.key==="Shift"&&!shiftDown){shiftDown=true;if(drawing)showShiftHint(true);}});
+window.addEventListener("keyup",   e=>{if(e.key==="Shift"){shiftDown=false;shiftEnd=null;showShiftHint(false);if(drawing)redrawAll();}});
+function showShiftHint(on){ document.getElementById("shift-hint").classList.toggle("show",on&&drawing); }
+function constrainPoint(origin, p){
+  const dx=p.x-origin.x, dy=p.y-origin.y, dist=Math.hypot(dx,dy);
+  if(dist<1) return {...p};
+  const a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
+  return {x:origin.x+dist*Math.cos(a), y:origin.y+dist*Math.sin(a)};
+}
+
+// ══ 变换辅助 ══════════════════════════════════════════════════════════════════
+function centroid(arrow){let sx=0,sy=0;arrow.sampled.forEach(p=>{sx+=p.x;sy+=p.y;});return{x:sx/arrow.sampled.length,y:sy/arrow.sampled.length};}
+function translatePts(pts,dx,dy){return pts.map(p=>({x:p.x+dx,y:p.y+dy}));}
+function rotatePts(pts,cx,cy,da){const cos=Math.cos(da),sin=Math.sin(da);return pts.map(p=>{const rx=p.x-cx,ry=p.y-cy;return{x:cx+rx*cos-ry*sin,y:cy+rx*sin+ry*cos};});}
+function scalePts(pts,cx,cy,s){return pts.map(p=>({x:cx+(p.x-cx)*s,y:cy+(p.y-cy)*s}));}
+function rebuildArrow(arrow){const s=arrow.straight?[arrow.ctrl[0],arrow.ctrl[arrow.ctrl.length-1]]:catmullRomSample(arrow.ctrl,14);arrow.sampled=s;arrow.tip=s[s.length-1];arrow.angle=tipAngle(s);}
+
+// ══ 变换控制柄（单选时显示） ══════════════════════════════════════════════════
+const HDL_R=6, ROT_OFF=32, HIT_R=14;
+function getBounds(arrow){
+  const pts=arrow.sampled;let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+  pts.forEach(p=>{if(p.x<x1)x1=p.x;if(p.y<y1)y1=p.y;if(p.x>x2)x2=p.x;if(p.y>y2)y2=p.y;});
+  const pad=arrow.headSize*0.6+arrow.lineWidth+4;
+  return{x1:x1-pad,y1:y1-pad,x2:x2+pad,y2:y2+pad,cx:(x1+x2)/2,cy:(y1+y2)/2};
+}
+function rotHandlePos(b){return{x:b.cx,y:b.y1-ROT_OFF};}
+function cornerHandles(b){return[{x:b.x1,y:b.y1},{x:b.x2,y:b.y1},{x:b.x2,y:b.y2},{x:b.x1,y:b.y2}];}
+
+function drawSelectionBox(arrow, full){
+  // full=true → 完整控制柄（单选），full=false → 仅虚线框（多选）
+  const b=getBounds(arrow);
+  ctx.save(); ctx.setLineDash([5,3]); ctx.strokeStyle="#4a7fff"; ctx.lineWidth=1.5;
+  ctx.strokeRect(b.x1,b.y1,b.x2-b.x1,b.y2-b.y1); ctx.restore(); ctx.setLineDash([]);
+  if(!full) return;
+
+  // 旋转柄
+  const rh=rotHandlePos(b);
+  ctx.beginPath(); ctx.moveTo(b.cx,b.y1); ctx.lineTo(rh.x,rh.y);
+  ctx.strokeStyle="rgba(74,127,255,0.6)"; ctx.lineWidth=1; ctx.stroke();
+  ctx.beginPath(); ctx.arc(rh.x,rh.y,HDL_R+2,0,Math.PI*2);
+  ctx.fillStyle="#fff"; ctx.fill(); ctx.strokeStyle="#4a7fff"; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(rh.x,rh.y,4,-Math.PI*0.6,Math.PI*0.4); ctx.strokeStyle="#4a7fff"; ctx.lineWidth=1.5; ctx.stroke();
+  // 角柄
+  cornerHandles(b).forEach(h=>{
+    ctx.fillStyle="#4a7fff"; ctx.fillRect(h.x-HDL_R,h.y-HDL_R,HDL_R*2,HDL_R*2);
+    ctx.strokeStyle="#fff"; ctx.lineWidth=1.5; ctx.strokeRect(h.x-HDL_R,h.y-HDL_R,HDL_R*2,HDL_R*2);
+  });
+  // 中心十字
+  const{cx,cy}=b; ctx.strokeStyle="rgba(74,127,255,0.4)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cx-8,cy); ctx.lineTo(cx+8,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-8); ctx.lineTo(cx,cy+8); ctx.stroke();
+}
+
+function hitHandle(arrow, p){
+  const b=getBounds(arrow), rh=rotHandlePos(b);
+  if(Math.hypot(p.x-rh.x,p.y-rh.y)<HIT_R) return 'rotate';
+  for(const h of cornerHandles(b)) if(Math.hypot(p.x-h.x,p.y-h.y)<HIT_R) return 'scale';
+  if(hitArrowBody(arrow,p)) return 'move';
+  return null;
+}
+function oppositeCorner(arrow, p){
+  const b=getBounds(arrow),ch=cornerHandles(b);let nearest=ch[0],nd=Infinity;
+  ch.forEach(h=>{const d=Math.hypot(p.x-h.x,p.y-h.y);if(d<nd){nd=d;nearest=h;}});
+  return{x:nearest.x===b.x1?b.x2:b.x1,y:nearest.y===b.y1?b.y2:b.y1};
+}
+
+// ══ 鼠标交互 ══════════════════════════════════════════════════════════════════
+let rawPts=[], drawing=false, dragDist=0, _finished=false, shiftAtDown=false;
+const CLICK_THRESH = 5;
+let xfMode=null, xfStart=null;
+
+function cvPos(e){ const r=cv.getBoundingClientRect(); return{x:e.clientX-r.left,y:e.clientY-r.top}; }
+function applyCursor(mode){ const m={move:'grab',rotate:'crosshair',scale:'nwse-resize',draw:'crosshair'}; cv.style.cursor=m[mode]||'crosshair'; }
+
+cv.addEventListener("mousemove", e=>{
+  const p=cvPos(e);
+  // ── 变换中 ──
+  if(xfMode){ doTransform(p); return; }
+  // ── 绘制中 ──
+  if(drawing){
+    if(shiftDown){
+      shiftEnd=constrainPoint(rawPts[0],p); redrawAll();
+      ctx.beginPath(); ctx.moveTo(rawPts[0].x,rawPts[0].y); ctx.lineTo(shiftEnd.x,shiftEnd.y);
+      ctx.strokeStyle="#4a7fff"; ctx.lineWidth=1.5; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+      const deg=Math.round(Math.atan2(shiftEnd.y-rawPts[0].y,shiftEnd.x-rawPts[0].x)*180/Math.PI);
+      ctx.fillStyle="#4a7fff"; ctx.font="11px sans-serif"; ctx.fillText(deg+"°",shiftEnd.x+8,shiftEnd.y-6);
+    } else {
+      const last=rawPts[rawPts.length-1]; dragDist+=Math.hypot(p.x-last.x,p.y-last.y); rawPts.push(p);
+      ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y);
+      ctx.strokeStyle="#bbbbbb"; ctx.lineWidth=1; ctx.lineCap="round"; ctx.setLineDash([]); ctx.stroke();
+    }
+    return;
+  }
+  // ── 悬停光标 ──
+  const si=singleIdx();
+  if(si>=0){ applyCursor(hitHandle(arrows[si],p)||'draw'); }
+  else if(selectedSet.size>0){
+    // 多选时，悬停在任意选中箭头上显示 move
+    let onAny=false;
+    for(const i of selectedSet){ if(hitArrowBody(arrows[i],p)){onAny=true;break;} }
+    applyCursor(onAny?'move':'draw');
+  }
+});
+
+cv.addEventListener("mousedown", e=>{
+  if(e.button!==0) return;
+  if(cv.width<10||cv.height<10) initCanvas();
+  const p=cvPos(e);
+  shiftAtDown=e.shiftKey;
+
+  // ── 单选时，检测变换控制柄 ──
+  const si=singleIdx();
+  if(si>=0 && !e.shiftKey){
+    const mode=hitHandle(arrows[si],p);
+    if(mode){ startTransform(mode,p); return; }
+  }
+
+  // ── 检测点击哪个箭头 ──
+  let hit=-1;
+  for(let i=arrows.length-1;i>=0;i--){ if(hitArrowBody(arrows[i],p)){hit=i;break;} }
+
+  if(hit>=0){
+    if(e.shiftKey){
+      // Shift+单击：切换选中状态
+      if(selectedSet.has(hit)) selectedSet.delete(hit); else selectedSet.add(hit);
+      syncButtons(); redrawAll();
+    } else {
+      if(selectedSet.has(hit)){
+        // 点击已选中的箭头：开始移动（所有选中的一起）
+        startTransform('move',p);
+      } else {
+        // 点击未选中箭头：切换为单选该箭头，并开始移动
+        selectedSet.clear(); selectedSet.add(hit);
+        syncButtons(); redrawAll();
+        startTransform('move',p);
+      }
+    }
+    return;
+  }
+
+  // ── 点击空白 ──
+  if(!e.shiftKey && selectedSet.size>0){ selectedSet.clear(); syncButtons(); }
+  // 开始绘制
+  rawPts=[p]; drawing=true; dragDist=0; _finished=false; shiftEnd=null;
+  redrawAll(); if(shiftDown) showShiftHint(true);
+  setStatus(shiftDown?"Shift 约束模式":"正在绘制…"); applyCursor('draw');
+});
+
+cv.addEventListener("mouseup",   e=>{ if(e.button!==0)return; if(xfMode){endTransform();return;} if(drawing)finishDrawing(); });
+cv.addEventListener("mouseleave",  ()=>{ if(xfMode){endTransform();return;} if(drawing)finishDrawing(); });
+window.addEventListener("mouseup", e=>{ if(e.button!==0)return; if(xfMode){endTransform();return;} if(drawing)finishDrawing(); });
+
+function finishDrawing(){
+  if(_finished) return; _finished=true; drawing=false; showShiftHint(false);
+  if(shiftDown && shiftEnd){ rawPts=[rawPts[0],shiftEnd]; shiftEnd=null; processAndCreate(true); }
+  else if(dragDist>=CLICK_THRESH){ processAndCreate(false); }
+  else { trySelect(rawPts[rawPts.length-1], shiftAtDown); }
+  applyCursor('draw');
+}
+
+// ══ 变换实现 ══════════════════════════════════════════════════════════════════
+function startTransform(mode, p){
+  pushHistory(); xfMode=mode;
+  if(mode==='move' && selectedSet.size>1){
+    // 多选移动：保存所有选中箭头的原始 ctrl
+    xfStart={x:p.x,y:p.y,multi:[...selectedSet].map(i=>({i,ctrl:clonePts(arrows[i].ctrl)}))};
+  } else {
+    const arrow=arrows[singleIdx()];
+    const cen=centroid(arrow);
+    const opp=mode==='scale'?oppositeCorner(arrow,p):null;
+    xfStart={x:p.x,y:p.y,origCtrl:clonePts(arrow.ctrl),origHeadSize:arrow.headSize,origLineWidth:arrow.lineWidth,
+      cx:cen.x,cy:cen.y,startAngle:Math.atan2(p.y-cen.y,p.x-cen.x),
+      _opp:opp,d0:opp?Math.hypot(p.x-opp.x,p.y-opp.y)||1:1};
+  }
+  applyCursor(mode);
+}
+
+function doTransform(p){
+  if(!xfMode||!xfStart) return;
+  if(xfStart.multi){
+    // 多选同步移动
+    const dx=p.x-xfStart.x, dy=p.y-xfStart.y;
+    xfStart.multi.forEach(({i,ctrl})=>{ arrows[i].ctrl=translatePts(ctrl,dx,dy); rebuildArrow(arrows[i]); });
+    redrawAll(); return;
+  }
+  const arrow=arrows[singleIdx()];
+  const{cx,cy,origCtrl,startAngle,_opp,d0}=xfStart;
+  if(xfMode==='move'){ arrow.ctrl=translatePts(origCtrl,p.x-xfStart.x,p.y-xfStart.y); }
+  else if(xfMode==='rotate'){ arrow.ctrl=rotatePts(origCtrl,cx,cy,Math.atan2(p.y-cy,p.x-cx)-startAngle); }
+  else if(xfMode==='scale'&&_opp){
+    const s=Math.max(0.05,Math.hypot(p.x-_opp.x,p.y-_opp.y)/d0);
+    arrow.ctrl=scalePts(origCtrl,_opp.x,_opp.y,s);
+    arrow.headSize=Math.max(4,xfStart.origHeadSize*s); arrow.lineWidth=Math.max(0.5,xfStart.origLineWidth*s);
+  }
+  rebuildArrow(arrow); redrawAll();
+}
+
+function endTransform(){ xfMode=null; xfStart=null; applyCursor('draw'); redrawAll(); setStatus(`变换完成 — 共 ${arrows.length} 个箭头`); }
+
+// ══ 创建箭头 ══════════════════════════════════════════════════════════════════
+function processAndCreate(forceStr){
+  if(rawPts.length<2){redrawAll();return;}
+  let ctrl, straight;
+  if(forceStr){ ctrl=[rawPts[0],rawPts[rawPts.length-1]]; straight=true; }
+  else{
+    const eps=Math.max(1,prefs.smoothing*1.8);
+    ctrl=douglasPeucker(rawPts,eps); if(ctrl.length<2)ctrl=[rawPts[0],rawPts[rawPts.length-1]];
+    straight=isStraight(ctrl,prefs.straightThresh);
+  }
+  const sampled=straight?[ctrl[0],ctrl[ctrl.length-1]]:catmullRomSample(ctrl,14);
+  pushHistory(); arrows.push(makeArrow(ctrl,straight,sampled));
+  selectedSet.clear(); selectedSet.add(arrows.length-1);
+  syncButtons(); redrawAll(); setStatus(`箭头已生成（${straight?"直线":"曲线"}）— 共 ${arrows.length} 个`);
+}
+
+// ══ 命中测试 ══════════════════════════════════════════════════════════════════
+function hitArrowBody(arrow, p, thresh=10){
+  const pts=arrow.sampled;
+  for(let i=0;i<pts.length-1;i++) if(ptSegDist(p,pts[i],pts[i+1])<thresh+arrow.lineWidth/2) return true;
+  return Math.hypot(p.x-arrow.tip.x,p.y-arrow.tip.y)<arrow.headSize+thresh;
+}
+function ptSegDist(p,a,b){const dx=b.x-a.x,dy=b.y-a.y;if(!dx&&!dy)return Math.hypot(p.x-a.x,p.y-a.y);const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy)));return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));}
+
+// ══ 选中 / 取消 ══════════════════════════════════════════════════════════════
+function trySelect(p, shiftKey=false){
+  for(let i=arrows.length-1;i>=0;i--){
+    if(hitArrowBody(arrows[i],p)){
+      if(shiftKey){ selectedSet.has(i)?selectedSet.delete(i):selectedSet.add(i); }
+      else{ selectedSet.clear(); selectedSet.add(i); }
+      syncButtons(); redrawAll();
+      setStatus(`已选中 ${selectedSet.size} 个箭头 — Shift+单击可加选/减选`);
+      return;
+    }
+  }
+  // 点击空白
+  if(!shiftKey && selectedSet.size>0){ selectedSet.clear(); syncButtons(); setStatus("拖动绘制；Shift+单击加选；Ctrl+Z 撤销"); }
+  redrawAll();
+}
+function deselectAll(){ selectedSet.clear(); redrawAll(); syncButtons(); applyCursor('draw'); setStatus("拖动绘制；Shift+单击加选；Ctrl+Z 撤销"); }
+
+// ══ 复制 / 删除 ══════════════════════════════════════════════════════════════
+function duplicateSelected(){
+  if(!selectedSet.size) return; pushHistory();
+  const off=22, newSet=new Set();
+  // 按索引排序，避免乱序
+  [...selectedSet].sort((a,b)=>a-b).forEach(i=>{
+    const src=arrows[i];
+    arrows.push({...src,ctrl:src.ctrl.map(p=>({x:p.x+off,y:p.y+off})),
+      sampled:src.sampled.map(p=>({x:p.x+off,y:p.y+off})),tip:{x:src.tip.x+off,y:src.tip.y+off}});
+    newSet.add(arrows.length-1);
+  });
+  selectedSet=newSet; redrawAll(); syncButtons();
+  setStatus(`已复制 ${newSet.size} 个箭头，共 ${arrows.length} 个`);
+}
+function deleteSelected(){
+  if(!selectedSet.size) return; pushHistory();
+  // 从大到小删，避免索引偏移
+  [...selectedSet].sort((a,b)=>b-a).forEach(i=>arrows.splice(i,1));
+  selectedSet.clear(); redrawAll(); syncButtons();
+  setStatus(`已删除，剩余 ${arrows.length} 个箭头`);
+}
+function syncButtons(){
+  document.getElementById('btn-edit-style').disabled = !selectedSet.size;
+  const has=selectedSet.size>0, single=selectedSet.size===1;
+  document.getElementById("btn-style").disabled = !single;
+  document.getElementById("btn-fav").disabled   = !single;
+  document.getElementById("btn-dup").disabled   = !has;
+  document.getElementById("btn-del").disabled   = !has;
+  document.getElementById("btn-desel").disabled = !has;
+}
+
+document.addEventListener("keydown", e=>{
+  if(document.querySelector('.modal-overlay.open')) return;
+  if(e.target.tagName==="INPUT") return;
+  if((e.key==="Delete"||e.key==="Backspace")&&selectedSet.size){ e.preventDefault(); deleteSelected(); }
+  if(e.key==="Escape"){ if(xfMode)endTransform(); else if(selectedSet.size){e.preventDefault();deselectAll();} }
+  if((e.ctrlKey||e.metaKey)&&e.key==="d"&&selectedSet.size){ e.preventDefault(); duplicateSelected(); }
+  if((e.ctrlKey||e.metaKey)&&e.key==="z"&&!e.shiftKey){ e.preventDefault(); undo(); }
+});
+
+// ══ 渲染 ══════════════════════════════════════════════════════════════════════
+function redrawAll(){
+  scheduleDraftSave();
+  ctx.clearRect(0,0,cv.width,cv.height); ctx.setLineDash([]);
+  const single=singleIdx();
+  arrows.forEach((arrow,i)=>{
+    renderArrow(arrow);
+    if(selectedSet.has(i)) drawSelectionBox(arrow, i===single);
+  });
+}
+
+function renderArrow(arrow){
+  const{sampled,tip,angle,style,color,lineWidth:lw,headSize:hs}=arrow;
+  if(sampled.length<2) return;
+  let pts=trimPath(sampled,styleTrimDist(style,hs));
+  if(pts.length>=2){
+    ctx.lineWidth=lw; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.setLineDash([]);
+    if(arrow.fade){
+      // 尾部渐隐：整条线一次描边到离屏画布，再用 destination-in 渐变作透明度蒙版（无接缝）
+      const pad=lw+2;
+      let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+      pts.forEach(p=>{if(p.x<x1)x1=p.x;if(p.y<y1)y1=p.y;if(p.x>x2)x2=p.x;if(p.y>y2)y2=p.y;});
+      x1=Math.floor(x1-pad); y1=Math.floor(y1-pad); x2=Math.ceil(x2+pad); y2=Math.ceil(y2+pad);
+      const w=x2-x1, h=y2-y1;
+      if(w>0&&h>0){
+        const fc=document.createElement("canvas"); fc.width=w; fc.height=h;
+        const fx=fc.getContext("2d"); fx.translate(-x1,-y1);
+        fx.beginPath(); fx.moveTo(pts[0].x,pts[0].y);
+        for(let i=1;i<pts.length;i++) fx.lineTo(pts[i].x,pts[i].y);
+        fx.strokeStyle=color; fx.lineWidth=lw; fx.lineCap="round"; fx.lineJoin="round"; fx.stroke();
+        fx.globalCompositeOperation="destination-in";
+        const g=fx.createLinearGradient(sampled[0].x,sampled[0].y,tip.x,tip.y);
+        g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(0,0,0,1)");
+        fx.fillStyle=g; fx.fillRect(x1,y1,w,h);
+        ctx.drawImage(fc,x1,y1);
+      }
+    }else{
+      ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+      ctx.strokeStyle=color; ctx.stroke();
+    }
+  }
+  paintHead(tip,angle,hs,style,color,lw);
+}
+
+function paintHead(tip,angle,hs,style,color,lw){
+  const HALF=Math.PI/5; ctx.setLineDash([]); ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=lw; ctx.lineCap="round"; ctx.lineJoin="round";
+  switch(style){
+    case'filled':{ctx.beginPath();ctx.moveTo(tip.x,tip.y);ctx.lineTo(tip.x-hs*Math.cos(angle-HALF),tip.y-hs*Math.sin(angle-HALF));ctx.lineTo(tip.x-hs*Math.cos(angle+HALF),tip.y-hs*Math.sin(angle+HALF));ctx.closePath();ctx.fill();break;}
+    case'open':{ctx.beginPath();ctx.moveTo(tip.x,tip.y);ctx.lineTo(tip.x-hs*Math.cos(angle-HALF),tip.y-hs*Math.sin(angle-HALF));ctx.lineTo(tip.x-hs*Math.cos(angle+HALF),tip.y-hs*Math.sin(angle+HALF));ctx.closePath();ctx.stroke();break;}
+    case'lines':{const H2=Math.PI/4;ctx.beginPath();ctx.moveTo(tip.x-hs*Math.cos(angle-H2),tip.y-hs*Math.sin(angle-H2));ctx.lineTo(tip.x,tip.y);ctx.lineTo(tip.x-hs*Math.cos(angle+H2),tip.y-hs*Math.sin(angle+H2));ctx.stroke();break;}
+    case'circle':{ctx.beginPath();ctx.arc(tip.x,tip.y,hs*0.45,0,Math.PI*2);ctx.fill();break;}
+    case'diamond':{const fw=hs*0.38,perp=angle+Math.PI/2,mx=tip.x-hs*0.5*Math.cos(angle),my=tip.y-hs*0.5*Math.sin(angle),bx=tip.x-hs*Math.cos(angle),by=tip.y-hs*Math.sin(angle);ctx.beginPath();ctx.moveTo(tip.x,tip.y);ctx.lineTo(mx+fw*Math.cos(perp),my+fw*Math.sin(perp));ctx.lineTo(bx,by);ctx.lineTo(mx-fw*Math.cos(perp),my-fw*Math.sin(perp));ctx.closePath();ctx.fill();break;}
+  }
+}
+
+// ══ SVG 导出 ══════════════════════════════════════════════════════════════════
+const f=n=>n.toFixed(2);
+let _fadeGradId=0;
+function headSVG(tip,angle,hs,style,color,lw){
+  const HALF=Math.PI/5,fp=(x,y)=>`${f(x)},${f(y)}`;
+  switch(style){
+    case'filled':{const lx=tip.x-hs*Math.cos(angle-HALF),ly=tip.y-hs*Math.sin(angle-HALF),rx=tip.x-hs*Math.cos(angle+HALF),ry=tip.y-hs*Math.sin(angle+HALF);return`<polygon points="${fp(tip.x,tip.y)} ${fp(lx,ly)} ${fp(rx,ry)}" fill="${color}"/>`;}
+    case'open':{const lx=tip.x-hs*Math.cos(angle-HALF),ly=tip.y-hs*Math.sin(angle-HALF),rx=tip.x-hs*Math.cos(angle+HALF),ry=tip.y-hs*Math.sin(angle+HALF);return`<polygon points="${fp(tip.x,tip.y)} ${fp(lx,ly)} ${fp(rx,ry)}" fill="none" stroke="${color}" stroke-width="${lw}" stroke-linejoin="round"/>`;}
+    case'lines':{const H2=Math.PI/4,lx=tip.x-hs*Math.cos(angle-H2),ly=tip.y-hs*Math.sin(angle-H2),rx=tip.x-hs*Math.cos(angle+H2),ry=tip.y-hs*Math.sin(angle+H2);return`<polyline points="${fp(lx,ly)} ${fp(tip.x,tip.y)} ${fp(rx,ry)}" fill="none" stroke="${color}" stroke-width="${lw}" stroke-linecap="round" stroke-linejoin="round"/>`;}
+    case'circle':return`<circle cx="${f(tip.x)}" cy="${f(tip.y)}" r="${f(hs*0.45)}" fill="${color}"/>`;
+    case'diamond':{const fw=hs*0.38,perp=angle+Math.PI/2,mx=tip.x-hs*0.5*Math.cos(angle),my=tip.y-hs*0.5*Math.sin(angle),bx=tip.x-hs*Math.cos(angle),by=tip.y-hs*Math.sin(angle);return`<polygon points="${[fp(tip.x,tip.y),fp(mx+fw*Math.cos(perp),my+fw*Math.sin(perp)),fp(bx,by),fp(mx-fw*Math.cos(perp),my-fw*Math.sin(perp))].join(' ')}" fill="${color}"/>`;}
+    default:return"";
+  }
+}
+function arrowSVGElements(arrow){
+  const{ctrl,straight,tip,angle,style,color,lineWidth:lw,headSize:hs}=arrow;
+  const td=styleTrimDist(style,hs);
+  function trimCtrl(pts,dist){if(dist<=0||pts.length<2)return pts;let r=pts.slice(),rem=dist;while(r.length>1&&rem>0){const a=r[r.length-2],b=r[r.length-1];const d=Math.hypot(b.x-a.x,b.y-a.y);if(d<=rem){rem-=d;r.pop();}else{const t=1-rem/d;r[r.length-1]={x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y)};rem=0;}}return r;}
+  const tc=trimCtrl(ctrl,td); let pathD;
+  if(straight||tc.length<3){const a=tc[0],b=tc[tc.length-1];pathD=`M ${f(a.x)} ${f(a.y)} L ${f(b.x)} ${f(b.y)}`;}
+  else{
+    const pts=[tc[0],...tc,tc[tc.length-1]]; pathD=`M ${f(tc[0].x)} ${f(tc[0].y)}`;
+    for(let i=1;i<pts.length-2;i++){const p0=pts[i-1],p1=pts[i],p2=pts[i+1],p3=pts[i+2];const cp1x=p1.x+(p2.x-p0.x)/6,cp1y=p1.y+(p2.y-p0.y)/6,cp2x=p2.x-(p3.x-p1.x)/6,cp2y=p2.y-(p3.y-p1.y)/6;pathD+=` C ${f(cp1x)},${f(cp1y)} ${f(cp2x)},${f(cp2y)} ${f(p2.x)},${f(p2.y)}`;}
+  }
+  let stroke=color, defs="";
+  if(arrow.fade){
+    // 尾→头线性渐变近似路径方向渐隐（首点全透明，箭头处不透明）
+    const gid=`fade${(++_fadeGradId)}`, a=tc[0];
+    defs=`<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${f(a.x)}" y1="${f(a.y)}" x2="${f(tip.x)}" y2="${f(tip.y)}"><stop offset="0" stop-color="${color}" stop-opacity="0"/><stop offset="1" stop-color="${color}" stop-opacity="1"/></linearGradient>\n  `;
+    stroke=`url(#${gid})`;
+  }
+  return`${defs}<path d="${pathD}" stroke="${stroke}" stroke-width="${lw}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>\n  ${headSVG(tip,angle,hs,style,color,lw)}`;
+}
+function buildAllSVG(){
+  const list=exportTarget(); if(!list.length)return"";
+  const {cw,ch,bx,by}=renderToOffscreen(list);
+  return`<svg xmlns="http://www.w3.org/2000/svg" width="${cw}" height="${ch}" viewBox="${bx} ${by} ${cw} ${ch}">\n`+list.map(a=>"  "+arrowSVGElements(a)).join("\n")+"\n</svg>";
+}
+
+// ══ PNG 渲染辅助 ══════════════════════════════════════════════════════════════
+function renderToOffscreen(copyList){
+  const PAD=4; let bx1=Infinity,by1=Infinity,bx2=-Infinity,by2=-Infinity;
+  copyList.forEach(arrow=>{
+    const pad=arrow.headSize+arrow.lineWidth+PAD;
+    arrow.sampled.forEach(p=>{if(p.x-pad<bx1)bx1=p.x-pad;if(p.y-pad<by1)by1=p.y-pad;if(p.x+pad>bx2)bx2=p.x+pad;if(p.y+pad>by2)by2=p.y+pad;});
+    const{tip}=arrow;
+    if(tip.x-pad<bx1)bx1=tip.x-pad;if(tip.y-pad<by1)by1=tip.y-pad;if(tip.x+pad>bx2)bx2=tip.x+pad;if(tip.y+pad>by2)by2=tip.y+pad;
+  });
+  const cw=Math.ceil(bx2-bx1), ch=Math.ceil(by2-by1);
+  const oc=document.createElement("canvas"); oc.width=cw; oc.height=ch;
+  const savedCtx=ctx; ctx=oc.getContext("2d");
+  ctx.translate(-bx1,-by1);
+  try { copyList.forEach(arrow=>renderArrow(arrow)); } finally { ctx=savedCtx; }
+  const pixels=oc.getContext('2d').getImageData(0,0,cw,ch).data;
+  let left=cw,top=ch,right=-1,bottom=-1;
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++) if(pixels[(y*cw+x)*4+3]){
+    left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);
+  }
+  if(right<0) throw new Error('选中的箭头没有可见内容');
+  const cropped=document.createElement('canvas');
+  cropped.width=right-left+1;cropped.height=bottom-top+1;
+  cropped.getContext('2d').drawImage(oc,left,top,cropped.width,cropped.height,0,0,cropped.width,cropped.height);
+  return{oc:cropped,cw:cropped.width,ch:cropped.height,bx:bx1+left,by:by1+top};
+}
+
+// 导出目标：有选中则选中的，否则全部
+function exportTarget(){ return arrows.filter((a,i)=>selectedSet.has(i)); }
+function requireSelection(){ if(!selectedSet.size){alert('请先选中要导出的箭头；按住 Shift 可加选多个。');return false;}return true; }
+
+// ══ 工具栏 ════════════════════════════════════════════════════════════════════
+function doSaveAll(){
+  if(!requireSelection())return;
+  if(!arrows.length){alert("请先绘制箭头");return;}
+  const blob=new Blob([buildAllSVG()],{type:"image/svg+xml"});
+  const url=URL.createObjectURL(blob);
+  Object.assign(document.createElement("a"),{href:url,download:"arrows.svg"}).click();
+  URL.revokeObjectURL(url); setStatus("SVG 文件已下载");
+}
+function doSavePNG(){
+  if(!requireSelection())return;
+  if(!arrows.length){alert("请先绘制箭头");return;}
+  const list=exportTarget();
+  const{oc,cw,ch}=renderToOffscreen(list);
+  oc.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    Object.assign(document.createElement("a"),{href:url,download:"arrow.png"}).click();
+    URL.revokeObjectURL(url);
+    setStatus(`已保存透明 PNG（${cw}×${ch}px，共 ${list.length} 个箭头）`);
+  },"image/png");
+}
+async function doCopyAll(){
+  if(!requireSelection())return;
+  if(!arrows.length){alert("请先绘制箭头");return;}
+  const list=exportTarget();
+  const{oc,cw,ch}=renderToOffscreen(list);
+  oc.toBlob(async blob=>{
+    try{
+      await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
+      setStatus(`已复制为透明 PNG（${cw}×${ch}px，${list.length} 个箭头），可粘贴到 Inkscape/PS/PPT`);
+    }catch(e){
+      const svg=buildAllSVG();
+      try{await navigator.clipboard.writeText(svg);}catch(e2){const ta=Object.assign(document.createElement("textarea"),{value:svg,style:"position:fixed;opacity:0"});document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}
+      setStatus("已复制 SVG 文本（浏览器不支持图片格式复制）");
+    }
+  },"image/png");
+}
+function doClear(){
+  if(arrows.length&&!confirm("确认清除全部箭头？"))return;
+  pushHistory(); arrows=[]; selectedSet.clear(); redrawAll(); syncButtons();
+  setStatus("拖动绘制；Shift+单击加选；Ctrl+Z 撤销");
+}
+function setStatus(msg){ document.getElementById("status").textContent=msg; }
+
+// ══ 预设箭头 ══════════════════════════════════════════════════════════════════
+function openPresets(){
+  if(document.activeElement)document.activeElement.blur();
+  renderPresetsGrid();
+  document.getElementById("presets-modal").classList.add("open");
+}
+function closePresets(){ document.getElementById("presets-modal").classList.remove("open"); }
+document.getElementById("presets-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closePresets();});
+
+// 将预设（单路径或多路径）转换为箭头对象数组，坐标缩放到 size 像素
+function presetToArrows(preset, size, lw, hs){
+  const paths = preset.paths || [{ctrl:preset.ctrl, straight:preset.straight}];
+  return paths.map(pp=>{
+    const ctrl=pp.ctrl.map(p=>({x:p.x*size/100,y:p.y*size/100}));
+    const sampled=pp.straight?[ctrl[0],ctrl[ctrl.length-1]]:catmullRomSample(ctrl,14);
+    return {ctrl,straight:pp.straight,sampled,tip:{...sampled[sampled.length-1]},angle:tipAngle(sampled),
+      style:preset.style||prefs.arrowStyle, color:preset.color||prefs.lineColor,
+      lineWidth:lw, headSize:hs, fade:!!preset.fade};
+  });
+}
+
+function presetThumbSVG(preset){
+  const lw=preset.paths?2:2.5, hs=preset.paths?7:10;
+  const list=presetToArrows(preset,80,lw,hs).map(a=>preset.color?a:{...a,color:'#222'});
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="100%" height="100%">${list.map(arrowSVGElements).join("\n")}</svg>`;
+}
+
+function renderPresetsGrid(){
+  const tabs=document.getElementById("presets-tabs"); tabs.innerHTML="";
+  PRESET_CATS.forEach((cat,ci)=>{
+    const b=document.createElement("button"); b.className="preset-tab"+(ci===activePresetCat?" active":"");
+    b.textContent=cat.name; b.onclick=()=>{activePresetCat=ci;renderPresetsGrid();};
+    tabs.appendChild(b);
+  });
+  const grid=document.getElementById("presets-grid"); grid.innerHTML="";
+  PRESET_CATS[activePresetCat].presets.forEach((preset,i)=>{
+    const item=document.createElement("div"); item.className="preset-item"; item.title=`放置「${preset.name}」`;
+    const thumb=document.createElement("div"); thumb.className="preset-thumb"; thumb.innerHTML=presetThumbSVG(preset);
+    const label=document.createElement("div"); label.className="preset-label"; label.textContent=preset.name;
+    item.appendChild(thumb); item.appendChild(label);
+    item.onclick=()=>{placePreset(activePresetCat,i);closePresets();};
+    grid.appendChild(item);
+  });
+}
+
+function placePreset(catIdx, idx){
+  const preset=PRESET_CATS[catIdx].presets[idx];
+  const size=preset.size||150;
+  const list=presetToArrows(preset,size,prefs.lineWidth,prefs.headSize);
+  // 整组居中到画布中心
+  let sx=0,sy=0,n=0;
+  list.forEach(a=>a.sampled.forEach(p=>{sx+=p.x;sy+=p.y;n++;}));
+  const dx=cv.width/2-sx/n, dy=cv.height/2-sy/n;
+  pushHistory(); selectedSet.clear();
+  list.forEach(a=>{
+    a.ctrl=translatePts(a.ctrl,dx,dy); a.sampled=translatePts(a.sampled,dx,dy);
+    a.tip={x:a.tip.x+dx,y:a.tip.y+dy};
+    arrows.push(a); selectedSet.add(arrows.length-1);
+  });
+  syncButtons(); redrawAll(); setStatus(`已添加预设「${preset.name}」`);
+}
+
+// ══ 收藏夹 ════════════════════════════════════════════════════════════════════
+let favorites=[], favPanelOpen=true;
+function loadFavorites(){try{const s=localStorage.getItem("arrow_favorites_v1");if(s)favorites=JSON.parse(s);}catch(e){}}
+function saveFavorites(){try{localStorage.setItem("arrow_favorites_v1",JSON.stringify(favorites));}catch(e){}}
+
+function addToFavorites(){
+  if(singleIdx()<0) return;
+  const src=arrows[singleIdx()];
+  favorites.unshift({ctrl:clonePts(src.ctrl),straight:src.straight,style:src.style,color:src.color,fade:!!src.fade,
+    lineWidth:src.lineWidth,headSize:src.headSize,sampled:clonePts(src.sampled),tip:{...src.tip},angle:src.angle,
+    label:new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})});
+  saveFavorites(); renderFavList(); setStatus("已添加到收藏夹");
+  if(!favPanelOpen)toggleFavPanel();
+}
+function removeFavorite(idx){ favorites.splice(idx,1); saveFavorites(); renderFavList(); }
+function placeFavorite(idx){
+  const fav=favorites[idx];
+  const sampled=fav.straight?[fav.ctrl[0],fav.ctrl[fav.ctrl.length-1]]:catmullRomSample(fav.ctrl,14);
+  let sx=0,sy=0; sampled.forEach(p=>{sx+=p.x;sy+=p.y;});
+  const dx=cv.width/2-sx/sampled.length, dy=cv.height/2-sy/sampled.length;
+  pushHistory();
+  arrows.push({...fav,ctrl:fav.ctrl.map(p=>({x:p.x+dx,y:p.y+dy})),
+    sampled:sampled.map(p=>({x:p.x+dx,y:p.y+dy})),tip:{x:fav.tip.x+dx,y:fav.tip.y+dy}});
+  selectedSet.clear(); selectedSet.add(arrows.length-1);
+  syncButtons(); redrawAll(); setStatus("已从收藏夹添加箭头");
+}
+function favThumbSVG(fav){
+  const pts=fav.sampled; let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+  pts.forEach(p=>{if(p.x<x1)x1=p.x;if(p.y<y1)y1=p.y;if(p.x>x2)x2=p.x;if(p.y>y2)y2=p.y;});
+  const pad=fav.headSize+fav.lineWidth+6; x1-=pad;y1-=pad;x2+=pad;y2+=pad;
+  return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x1.toFixed(1)} ${y1.toFixed(1)} ${(x2-x1).toFixed(1)} ${(y2-y1).toFixed(1)}" width="100%" height="100%">${arrowSVGElements(fav)}</svg>`;
+}
+function renderFavList(){
+  const list=document.getElementById("fav-list"),empty=document.getElementById("fav-empty");
+  if(!favorites.length){empty.style.display="";[...list.children].forEach(c=>{if(c!==empty)c.remove();});return;}
+  empty.style.display="none"; [...list.children].forEach(c=>{if(c!==empty)c.remove();});
+  favorites.forEach((fav,i)=>{
+    const item=document.createElement("div"); item.className="fav-item"; item.title="点击放置到画布";
+    const thumb=document.createElement("div"); thumb.className="fav-thumb"; thumb.innerHTML=favThumbSVG(fav); thumb.onclick=()=>placeFavorite(i);
+    const label=document.createElement("div"); label.className="fav-label"; label.textContent=fav.label;
+    const del=document.createElement("button"); del.className="fav-del"; del.textContent="×"; del.title="删除此收藏";
+    del.onclick=ev=>{ev.stopPropagation();removeFavorite(i);};
+    item.appendChild(del); item.appendChild(thumb); item.appendChild(label); list.appendChild(item);
+  });
+}
+function toggleFavPanel(){
+  favPanelOpen=!favPanelOpen;
+  document.getElementById("fav-panel").classList.toggle("collapsed",!favPanelOpen);
+  document.getElementById("fav-toggle").style.display=favPanelOpen?"none":"";
+  document.querySelector("#fav-header button").textContent=favPanelOpen?"◀":"▶";
+  clearTimeout(_rsTimer);
+  _rsTimer=setTimeout(()=>{const r=document.getElementById("canvas-wrap").getBoundingClientRect();cv.width=Math.max(100,r.width-20);cv.height=Math.max(100,r.height-20);redrawAll();},220);
+}
+document.getElementById("fav-toggle").style.display="none";
+
+// ══ 偏好设置 ══════════════════════════════════════════════════════════════════
+let selectedStyle=prefs.arrowStyle;
+function stylePreviewSVG(style){const tip={x:38,y:14},hs=14,color="#333",lw=2,td=styleTrimDist(style,hs);return`<svg width="44" height="28" viewBox="0 0 44 28" xmlns="http://www.w3.org/2000/svg"><line x1="6" y1="14" x2="${38-td}" y2="14" stroke="${color}" stroke-width="${lw}" stroke-linecap="round"/>${headSVG(tip,0,hs,style,color,lw)}</svg>`;}
+function buildStylePicker(){
+  const picker=document.getElementById("style-picker"); picker.innerHTML="";
+  ARROW_STYLES.forEach(s=>{
+    const div=document.createElement("div"); div.className="style-opt"+(s.value===selectedStyle?" selected":"");
+    div.innerHTML=stylePreviewSVG(s.value)+`<span>${s.label}</span>`;
+    div.onclick=()=>{selectedStyle=s.value;picker.querySelectorAll(".style-opt").forEach(el=>el.classList.remove("selected"));div.classList.add("selected");};
+    picker.appendChild(div);
+  });
+}
+function openPrefs(){
+  if(document.activeElement)document.activeElement.blur();
+  selectedStyle=prefs.arrowStyle;
+  document.getElementById("p-lw").value=prefs.lineWidth; document.getElementById("p-hs").value=prefs.headSize;
+  document.getElementById("p-sm").value=prefs.smoothing; document.getElementById("p-st").value=prefs.straightThresh;
+  document.getElementById("p-color").value=prefs.lineColor; document.getElementById("p-bg").value=prefs.canvasBg;
+  document.getElementById("range-sm-val").textContent=prefs.smoothing;
+  document.getElementById("range-st-val").textContent=prefs.straightThresh.toFixed(2);
+  buildStylePicker(); document.getElementById("prefs-modal").classList.add("open");
+}
+function closePrefs(){ document.getElementById("prefs-modal").classList.remove("open"); }
+function applyPrefs(){
+  prefs.lineWidth=parseInt(document.getElementById("p-lw").value)||DEFAULTS.lineWidth;
+  prefs.headSize=parseInt(document.getElementById("p-hs").value)||DEFAULTS.headSize;
+  prefs.smoothing=parseInt(document.getElementById("p-sm").value)||DEFAULTS.smoothing;
+  prefs.straightThresh=parseFloat(document.getElementById("p-st").value)||DEFAULTS.straightThresh;
+  prefs.lineColor=document.getElementById("p-color").value; prefs.canvasBg=document.getElementById("p-bg").value;
+  prefs.arrowStyle=selectedStyle; savePrefs(prefs); cv.style.background=prefs.canvasBg; closePrefs();
+}
+function resetPrefs(){ const original=prefs; prefs={...DEFAULTS}; openPrefs(); prefs=original; }
+document.getElementById("p-sm").addEventListener("input",e=>document.getElementById("range-sm-val").textContent=e.target.value);
+document.getElementById("p-st").addEventListener("input",e=>document.getElementById("range-st-val").textContent=parseFloat(e.target.value).toFixed(2));
+document.getElementById("prefs-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closePrefs();});
+
+const selectionFields={'s-color':'color','s-width':'lineWidth','s-head':'headSize','s-style':'style','s-fade':'fade'};
+let selectionEdits=new Set(),styleTargets=[];
+for(const id of Object.keys(selectionFields)) document.getElementById(id).addEventListener('input',()=>selectionEdits.add(id));
+function openSelectedStyle(){
+  if(!selectedSet.size)return;
+  document.activeElement?.blur();
+  styleTargets=exportTarget();selectionEdits.clear();
+  const first=styleTargets[0];
+  for(const [id,key] of Object.entries(selectionFields)) document.getElementById(id).value=key==='fade'?String(!!first[key]):first[key];
+  document.getElementById('selection-style-title').textContent=`修改选中样式 · ${styleTargets.length} 个箭头`;
+  document.getElementById('s-note').textContent=styleTargets.length>1?'当前显示第一个选中箭头的属性；未修改的属性各自保留。':'';
+  document.getElementById('selection-style-modal').classList.add('open');
+}
+function closeSelectedStyle(){document.getElementById('selection-style-modal').classList.remove('open');}
+function applySelectedStyle(){
+  const changes={};
+  for(const id of selectionEdits){
+    const input=document.getElementById(id),key=selectionFields[id];
+    if(!input.checkValidity()){input.reportValidity();return;}
+    changes[key]=key==='fade'?input.value==='true':(key==='lineWidth'||key==='headSize'?Number(input.value):input.value);
+    if((key==='lineWidth'||key==='headSize')&&(!Number.isFinite(changes[key])||changes[key]<=0)){input.reportValidity();return;}
+  }
+  const targets=styleTargets.filter(a=>arrows.includes(a));
+  if(targets.length&&selectionEdits.size){pushHistory();targets.forEach(a=>Object.assign(a,changes));redrawAll();syncButtons();setStatus(`已修改 ${targets.length} 个箭头的样式，可用 Ctrl+Z 撤销`);}
+  closeSelectedStyle();
+}
+document.getElementById('selection-style-modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSelectedStyle();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSelectedStyle();});
+// 自动保存仅保存作品，不保存选框；恢复失败时保留原存储。
+let draftTimer;
+function scheduleDraftSave(){
+  clearTimeout(draftTimer);
+  draftTimer=setTimeout(saveDraft,500);
+}
+function saveDraft(){
+  try{localStorage.setItem('arrow_canvas_draft_v1',JSON.stringify(arrows));}
+  catch(e){setStatus('自动保存失败，请及时导出作品（浏览器存储可能已满）');}
+}
+function restoreDraft(){
+  try{
+    const data=JSON.parse(localStorage.getItem('arrow_canvas_draft_v1')||'[]');
+    if(Array.isArray(data)&&data.every(a=>Array.isArray(a.ctrl)&&Array.isArray(a.sampled)&&a.sampled.length>=2&&a.tip)) arrows=data;
+  }catch(e){setStatus('上次画布无法读取，本次打开空白画布');}
+}
+window.addEventListener('pagehide',saveDraft);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDraft();});
+// ══ 启动 ══════════════════════════════════════════════════════════════════════
+restoreDraft();
+loadFavorites(); renderFavList();
+window.addEventListener("load", initCanvas);
+if(document.readyState==="complete") initCanvas();
+</script>
+</body>
+</html>
